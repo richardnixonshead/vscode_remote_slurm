@@ -55,7 +55,7 @@ function allocate_resources {
     # Example: NODE: node1
     REMOTE_COMMAND="FOUND_JOB=\$(squeue --user=$REMOTE_USERNAME --name=$JOB_NAME --states=R,PD -h -O JobID) && \
         if [[ ! -z \"\$FOUND_JOB\" ]]; then \
-            >&2 echo \"Job $JOB_NAME already exists. Skipping resource reservation. Granted job allocation \$FOUND_JOB\"; \
+            >&2 echo \"Job \$JOB_NAME already exists. Skipping resource reservation. Granted job allocation \$FOUND_JOB\"; \
         else \
             $REMOTE_COMMAND; \
         fi; >&2 echo \"NODE: \$(squeue --user=$REMOTE_USERNAME --name=$JOB_NAME --states=R -h -O Nodelist | awk '{print \$1}')\""
@@ -68,12 +68,12 @@ function allocate_resources {
     # The end part that looks like someone mashed their keyboard came from this SO post:
     # https://unix.stackexchange.com/questions/474177/how-to-redirect-stderr-in-a-variable-but-keep-stdout-in-the-console
 
-    { ALLOC_OUTPUT=$($SSH_BINARY -F $SSH_CONFIG_FILE -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -i $IDENTITYFILE $REMOTE_USERNAME@$HOSTNAME $REMOTE_COMMAND 2>&1 >&3 3>&-); } 3>&1
+    { ALLOC_OUTPUT=$($SSH_BINARY -F $SSH_CONFIG_FILE -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -i $IDENTITYFILE $REMOTE_USERNAME@$HOSTNAME "$REMOTE_COMMAND" 2>&1 >&3 3>&-); } 3>&1
     
-    # if [[ $DEBUGMODE == 1 ]]; then
-    #     echo "Modified REMOTE_COMMAND: $REMOTE_COMMAND"
-    #     echo "Here's ALLOC_OUTPUT: $ALLOC_OUTPUT"
-    # fi
+    if [[ $DEBUGMODE == 1 ]]; then
+        echo "Modified REMOTE_COMMAND: $REMOTE_COMMAND"
+        echo "Here's ALLOC_OUTPUT: $ALLOC_OUTPUT"
+    fi
 
     # Extract the job id
     export JOBID=$(echo $ALLOC_OUTPUT | grep -oE "Granted job allocation [0-9]+" | awk '{print $NF}')
@@ -81,7 +81,7 @@ function allocate_resources {
         echo "JOBID: $JOBID"
     fi
     # Extract the node name
-    NODE=$(echo $ALLOC_OUTPUT | grep -oE "NODE: [a-zA-Z0-9]+" | awk '{print $NF}')
+    NODE=$(echo $ALLOC_OUTPUT | grep -oE "NODE: [a-zA-Z0-9\-]+" | awk '{print $NF}')
     NODE=$(extract_prefix_and_number $NODE)
     if [[ $DEBUGMODE == 1 ]]; then
         echo "NODE: $NODE"
@@ -178,14 +178,14 @@ else
 
         if [[ $DEBUGMODE == 1 ]]; then
             echo "SRUN_COMMAND: $SRUN_COMMAND"
+            echo "stdin_commands: $stdin_commands"
         fi
 
         $SSH_BINARY -F $SSH_CONFIG_FILE -T -A -i $IDENTITYFILE -D $PORT \
         -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT \
         -J $REMOTE_USERNAME@$HOSTNAME $REMOTE_USERNAME@$NODE \
         srun --overlap --jobid $JOBID /bin/bash -lc \
-        "'$stdin_commands && \
-        $SRUN_COMMAND'"
+        "'$stdin_commands && $SRUN_COMMAND'"
 
     else
         # Execute the SSH command normally without resource allocation
